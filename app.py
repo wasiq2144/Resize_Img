@@ -1,63 +1,57 @@
-from flask import Flask, render_template, request, send_file
+import streamlit as st
 from PIL import Image
-import os
 import io
-from werkzeug.utils import secure_filename
 
-app = Flask(__name__)
+st.set_page_config(page_title="🖼️ Image Resizer", layout="centered")
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        image = request.files.get("image")
-        width = request.form.get("width")
-        height = request.form.get("height")
-        percent = request.form.get("percent")
+st.markdown("<h2 style='text-align:center;'>🖼️ Image Resizer Tool</h2>", unsafe_allow_html=True)
 
-        if not image:
-            return "No image provided", 400
+with st.container():
+    col1, col2 = st.columns([2, 1])
 
-        try:
-            img = Image.open(image)
+    with col1:
+        uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
-            # Convert to RGB if needed
-            if img.mode == 'RGBA':
-                img = img.convert("RGB")
+    with col2:
+        resize_method = st.radio("Resize by:", ["Width & Height", "Percentage"])
 
-            original_size = img.size  # (width, height)
+if uploaded_file:
+    image = Image.open(uploaded_file)
 
-            # Decide resizing method
-            if percent:
-                scale = int(percent) / 100
-                new_width = int(img.width * scale)
-                new_height = int(img.height * scale)
-                img = img.resize((new_width, new_height))
-            elif width and height:
-                img = img.resize((int(width), int(height)))
-            else:
-                return "Please provide either width & height or percentage", 400
+    # st.image(image, caption="Original Image", use_container_width=True)
 
-            # Build download filename
-            original_filename = secure_filename(image.filename)
-            base_name, _ = os.path.splitext(original_filename)
-            new_filename = f"{base_name}_resized.jpg"
+    with st.container():
+        if resize_method == "Width & Height":
+            col3, col4 = st.columns(2)
+            with col3:
+                width = st.number_input("Width", min_value=1, value=image.width)
+            with col4:
+                height = st.number_input("Height", min_value=1, value=image.height)
+        else:
+            percent = st.slider("Resize Percentage", 10, 200, 100)
 
-            # Save to buffer
-            buffer = io.BytesIO()
-            img.save(buffer, format="JPEG")
-            buffer.seek(0)
+    if st.button("Resize"):
+        if resize_method == "Width & Height":
+            resized = image.resize((int(width), int(height)))
+        else:
+            resized = image.resize((int(image.width * percent / 100), int(image.height * percent / 100)))
 
-            return send_file(
-                buffer,
-                as_attachment=True,
-                download_name=new_filename,
-                mimetype="image/jpeg"
-            )
+        if resized.mode == "RGBA":
+            resized = resized.convert("RGB")
 
-        except Exception as e:
-            return f"Error processing image: {e}", 500
+                    # Display side-by-side
+        col1, col2 = st.columns(2)
 
-    return render_template("index.html")
+        with col1:
+            st.markdown("### 📷 Original Image")
+            st.image(image, use_container_width=True)
 
-if __name__ == "__main__":
-    app.run(debug=True)
+        with col2:
+            st.markdown("### ✂️ Resized Image")
+            st.image(resized, use_container_width=True)
+
+        buf = io.BytesIO()
+        resized.save(buf, format="JPEG")
+        byte_im = buf.getvalue()
+
+        st.download_button("Download Image", data=byte_im, file_name="resized.jpg", mime="image/jpeg")
